@@ -1,9 +1,14 @@
 """TP 2 : python3 tp_rag.py A [--llm]. Sans dépendance Python externe."""
 
 import argparse
+import base64
+import binascii
+import hashlib
+import hmac
 import json
 import math
 import re
+import time
 from functools import cache
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -77,6 +82,9 @@ def retrieve(question, corpus, k=3, cap=None):
 def contexte_docs(question, corpus, token=None, defenses=frozenset(), cap=1,
                   detect=None):
     docs = retrieve(question, corpus, cap=cap if "cap" in defenses else None)
+    if "rbac" in defenses:
+        habilitations = droits(token)[0]
+        docs = [d for d in docs if d["clearance"] in habilitations]
     if "filtre" in defenses:
         detector = detect if detect is not None else detect_regex
         docs = [d for d in docs if not detector(d["text"])]
@@ -166,7 +174,87 @@ def partie_b(with_llm=False):
         mesure_detecteurs(BATCH, detect_ensemble, "ensemble")
 
 
-PARTIES = {"A": partie_a, "B": partie_b}
+def b64(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
+
+
+def b64d(value):
+    return base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
+
+
+def jwt_encode(payload, secret, alg="HS256"):
+    header = b64(json.dumps({"alg": alg, "typ": "JWT"}).encode())
+    body = b64(json.dumps(payload).encode())
+    signature = "" if alg == "none" else b64(hmac.new(
+        secret.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
+    return f"{header}.{body}.{signature}"
+
+
+def jwt_decode(token, secret, now=None):
+    try:
+        header, body, signature = token.split(".")
+        metadata = json.loads(b64d(header))
+        if not isinstance(metadata, dict) or metadata.get("alg") != "HS256":
+            return None, "alg refuse"
+        expected = b64(hmac.new(secret.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(expected, signature):
+            return None, "signature invalide"
+        payload = json.loads(b64d(body))
+        if not isinstance(payload, dict):
+            return None, "malforme"
+        if "exp" in payload:
+            exp = payload["exp"]
+            if type(exp) not in (int, float) or not math.isfinite(exp):
+                return None, "malforme"
+            if (time.time() if now is None else now) >= exp:
+                return None, "expire"
+        return payload, "ok"
+    except (ValueError, TypeError, AttributeError, binascii.Error):
+        return None, "malforme"
+
+
+# Secret public du labo, uniquement pour signer les identités fictives.
+SECRET = "secret-partage-du-cours"
+TOKEN_PUBLIC = jwt_encode({"user": "alice", "role": "public"}, SECRET)
+TOKEN_RH = jwt_encode({"user": "bob", "role": "rh"}, SECRET)
+TOKEN_FORGE = jwt_encode({"user": "x", "role": "rh"}, "mauvais-secret")
+TOKEN_ALGNONE = jwt_encode({"user": "x", "role": "rh"}, SECRET, alg="none")
+MATRICE = {"public": {"public"}, "rh": {"public", "rh"},
+           "direction": {"public", "rh", "direction"}}
+
+
+def droits(token):
+    payload, etat = jwt_decode(token, SECRET)
+    role = payload.get("role") if payload else "public"
+    if not isinstance(role, str) or role not in MATRICE:
+        role = "public"
+    return MATRICE[role], role, etat
+
+
+def partie_c(with_llm=False):
+    corpus = [D_CONGES, D_SALAIRE]
+    docs = contexte_docs(Q_SALAIRE, corpus, defenses={"filtre"})
+    assert D_SALAIRE in docs
+    print("Filtre seul :", [d["id"] for d in docs])
+    assert jwt_decode(TOKEN_FORGE, SECRET)[1] == "signature invalide"
+    assert jwt_decode(TOKEN_ALGNONE, SECRET)[1] == "alg refuse"
+    for name, token in [("PUBLIC", TOKEN_PUBLIC), ("RH", TOKEN_RH),
+                        ("FORGE", TOKEN_FORGE), ("alg:none", TOKEN_ALGNONE), ("absent", None)]:
+        docs = contexte_docs(Q_SALAIRE, corpus, token, {"filtre", "rbac"})
+        print(name, droits(token)[2], "->", [d["id"] for d in docs])
+        assert (D_SALAIRE in docs) == (name == "RH")
+    perime = jwt_encode({"role": "rh", "exp": 1}, SECRET)
+    assert jwt_decode(perime, SECRET, now=1)[1] == "expire"
+    assert jwt_decode(perime, SECRET, now=0)[1] == "ok"
+    assert jwt_decode(TOKEN_RH, SECRET)[1] == "ok"
+    for token in ["invalide", jwt_encode([], SECRET),
+                  jwt_encode({"role": [], "exp": "demain"}, SECRET)]:
+        assert jwt_decode(token, SECRET)[0] is None
+    assert droits(jwt_encode({"role": []}, SECRET))[0] == {"public"}
+    print("Expiration, signature et entrées malformées : assertions OK")
+
+
+PARTIES = {"A": partie_a, "B": partie_b, "C": partie_c}
 
 
 def main():

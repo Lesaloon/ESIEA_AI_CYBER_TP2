@@ -58,3 +58,41 @@ script lors d'une vraie exécution, pas inventés ici.
 Limite du TP : les détecteurs LLM ne lisent que les 300 premiers caractères.
 Une consigne plus loin peut leur échapper ; il faudrait analyser tout le contenu
 par morceaux pour traiter ce cas.
+
+## Partie C — Identité, JWT et RBAC
+
+Lancer `python3 tp_rag.py C` : ces vérifications ne nécessitent pas de LLM.
+
+**C1.** Avec le filtre seul, `salaire` entre dans le contexte : un document
+confidentiel ne contient pas forcément une injection. Un system prompt ne remplace
+pas un contrôle d'accès.
+
+**C2.** Le JWT contient `en-tête.payload.signature`. `jwt_decode` impose **HS256**,
+recalcule le HMAC-SHA256 et compare la signature avec `hmac.compare_digest` avant
+de faire confiance au payload. Le jeton RH honnête est accepté.
+
+**C3. Résultats locaux :** jeton signé avec le mauvais secret → `signature invalide` ;
+jeton `alg:none` → `alg refuse`.
+
+**C4.** La matrice autorise public→public, rh→public+rh,
+direction→public+rh+direction. Le RBAC retire les documents non autorisés du
+contexte avant la génération. Résultats locaux :
+
+| Identité | Documents accessibles |
+| --- | --- |
+| Public | conges |
+| RH valide | salaire, conges (ordre BM25) |
+| Faux jeton / alg:none / jeton absent | conges |
+
+Le cas sans jeton retombe aussi en public : activer RBAC sans fournir de jeton
+ne doit jamais désactiver le contrôle d'accès. Un rôle inconnu est également public.
+
+**C5.** Si `exp` existe, le jeton est refusé dès `now >= exp`. Le test couvre
+l'échéance exacte et `now=0`. Le jeton avec `exp=1` est expiré aujourd'hui ;
+le jeton RH du socle reste accepté car il n'a pas de champ `exp`.
+Une expiration réduit la durée d'utilisation d'un jeton volé, sans le révoquer
+immédiatement. Les horloges doivent être synchronisées.
+
+Le secret est celui, public, du cours et les jetons du socle n'expirent pas :
+c'est une démonstration pédagogique. Une application réelle utiliserait un secret
+privé et des jetons à durée de vie limitée.
