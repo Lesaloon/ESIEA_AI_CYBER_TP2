@@ -35,3 +35,26 @@ de finir par `PWNED-42`. C'est une injection **indirecte** : l'ordre provient d'
 document récupéré, pas de l'utilisateur. Le modèle peut confondre les données avec
 des instructions. Le test `--llm` vérifie si la réponse finit effectivement par ce
 code ; une attaque peut échouer selon la génération.
+
+## Partie B — Filtre d'entrée et mesures
+
+Lancer `python3 tp_rag.py B` (ajouter `--llm` pour l'ensemble).
+
+**B1.** Le filtre examine chaque document récupéré avant la génération. `ATK1`
+déclenche le regex et est retirée ; le modèle ne reçoit plus cet ordre.
+
+**B2.** `ATK2` demande d'ajouter le code en bas de la réponse, sans les formulations
+connues du regex : résultat local **False**. L'ensemble combine regex, classifieur
+et juge avec un OU. Le résultat attendu du modèle est **True**, car il peut repérer
+l'intention malgré la paraphrase ; cela reste à mesurer avec `--llm`.
+
+**B3. Résultat local sur les cinq exemples de l'énoncé :** regex : VP=1, FP=0,
+FN=2, donc **précision 100 %**, **rappel 33 %**.
+La précision vaut VP/(VP+FP), le rappel VP/(VP+FN). Un FP retire un document sain ;
+un FN laisse passer une attaque. L'ensemble vise à améliorer le rappel, mais peut
+produire des FP et coûte des appels au modèle. Ses chiffres sont affichés par le
+script lors d'une vraie exécution, pas inventés ici.
+
+Limite du TP : les détecteurs LLM ne lisent que les 300 premiers caractères.
+Une consigne plus loin peut leur échapper ; il faudrait analyser tout le contenu
+par morceaux pour traiter ce cas.
