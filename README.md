@@ -96,3 +96,43 @@ immédiatement. Les horloges doivent être synchronisées.
 Le secret est celui, public, du cours et les jetons du socle n'expirent pas :
 c'est une démonstration pédagogique. Une application réelle utiliserait un secret
 privé et des jetons à durée de vie limitée.
+
+## Partie D — Récupération, Unicode et sortie
+
+Lancer `python3 tp_rag.py D`. L'option `--llm` ajoute les générations flooding,
+provenance et recopie de salaire.
+
+**D1. Flooding.** `MES_LEURRES` contient six documents annonçant 50 jours.
+Résultat local : le top-3 contient `flood0`, `flood1`, `flood2` ; le document
+officiel est éjecté. Le modèle pourrait donc répondre **50 jours**, valeur fausse.
+Le filtre d'injection ne détecte pas cette désinformation factuelle.
+
+**D2. Cap et provenance.** Avec `cap=1`, le résultat devient `flood0`, `conges`.
+Le vrai document redevient accessible, mais un mensonge reste présent.
+La provenance conserve seulement `rh_officiel.md` et `paie_confidentiel.csv` :
+les leurres disparaissent. La réponse attendue avec le modèle est alors 25 jours.
+Le nom de source et l'habilitation doivent être des métadonnées attribuées par le
+serveur, pas des déclarations libres de l'uploadeur. Une source fiable compromise
+reste un risque ; un cap par nom de fichier ne suffit pas face à plusieurs sources.
+
+**D3–D4. Unicode.** `ATK5` insère U+200B dans `ignore`, `termine` et le code.
+Résultat local : regex sur texte brut **False**, après normalisation **True**.
+La normalisation applique NFKC, retire quatre caractères invisibles et remplace
+les homoglyphes fournis. Elle intervient avant le classement et les détecteurs.
+Ce petit dictionnaire ne couvre pas tous les caractères Unicode.
+
+**D5–D6. Markdown.** `ATK6` demande un badge image dont l'URL contient une donnée.
+Localement, le document passe le filtre regex. Si un navigateur charge cette image,
+il transmet la requête au serveur distant ; le script se limite à manipuler le
+texte et ne charge aucune image. `assainir_sortie` remplace les images par
+`[image retiree]`, conserve le libellé des liens et remplace les URL HTTP(S) brutes
+par `[lien retire]`. La vérification locale couvre ces trois cas.
+Ce nettoyage est limité au Markdown simple de l'exercice : ce n'est pas un
+assainisseur HTML/Markdown général. Un vrai rendu riche demande un parseur et
+une politique de rendu qui bloque les ressources distantes.
+
+**D7. Recopie.** `ATK7` demande de recopier la grille salariale sous prétexte
+d'audit. Sans défense, elle est disponible dans le contexte et peut fuiter.
+Avec filtre+RBAC et un jeton public, le salaire est retiré de façon déterministe ;
+le classifieur/juge peut aussi rejeter la consigne de recopie. Le regex seul ne
+reconnaît pas cette paraphrase. La fuite effective se mesure avec `--llm`.
