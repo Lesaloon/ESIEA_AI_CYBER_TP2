@@ -136,3 +136,27 @@ d'audit. Sans défense, elle est disponible dans le contexte et peut fuiter.
 Avec filtre+RBAC et un jeton public, le salaire est retiré de façon déterministe ;
 le classifieur/juge peut aussi rejeter la consigne de recopie. Le regex seul ne
 reconnaît pas cette paraphrase. La fuite effective se mesure avec `--llm`.
+
+## Partie E — Tableau de bord ASR
+
+Lancer `python3 tp_rag.py E`. L'ASR vaut le nombre de charges qui passent divisé
+par les cinq attaques de référence. Comme dans l'énoncé, il mesure l'arrivée de
+la charge dans le contexte (ou la présence d'une image dans la sortie reconstruite),
+**pas la probabilité que le modèle obéisse**. Il n'appelle aucun LLM et utilise
+le regex pour rendre les résultats reproductibles.
+
+Résultats locaux vérifiés par assertions :
+
+| Défenses cumulées | Attaque supplémentaire bloquée | ASR |
+| --- | --- | --- |
+| Aucune | — | 5/5 = 100 % |
+| Filtre | Injection directe | 4/5 = 80 % |
+| + RBAC | Fuite salaire | 3/5 = 60 % |
+| + Normalisation | Injection Unicode | 2/5 = 40 % |
+| + Assainissement | Image Markdown | 1/5 = 20 % |
+| + Provenance | Flooding | 0/5 = 0 % |
+
+Chaque couche retire ici une attaque supplémentaire. Le cap par source, testé
+en D, ne suffit pas à faire tomber la mesure flooding à zéro : un leurre reste
+présent. La provenance écarte ces leurres. **0 % sur cinq cas ne prouve pas une
+sécurité absolue** : les paraphrases et les sources compromises restent à étudier.

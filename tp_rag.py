@@ -326,7 +326,61 @@ def partie_d(with_llm=False):
                 defenses={"filtre", "rbac"}, succes=gagne)
 
 
-PARTIES = {"A": partie_a, "B": partie_b, "C": partie_c, "D": partie_d}
+D_POISON = {"id": "poison", "clearance": "public", "source": "note_externe.md", "text": ATK1}
+D_UNICODE = {"id": "poison_uni", "clearance": "public", "source": "note_ext2.md", "text": ATK5}
+D_MARKDOWN = {"id": "poison_md", "clearance": "public", "source": "note_ext3.md", "text": ATK6}
+# Chaque ligne : nom, question, corpus, identité, document cible, type de mesure.
+ATTAQUES = [
+    ("injection directe", QUESTION, [D_CONGES, D_POISON], None, "poison", "doc"),
+    ("fuite salaire", Q_SALAIRE, [D_CONGES, D_SALAIRE], TOKEN_PUBLIC, "salaire", "doc"),
+    ("injection unicode", QUESTION, [D_CONGES, D_UNICODE], None, "poison_uni", "doc"),
+    ("exfil markdown", QUESTION, [D_CONGES, D_MARKDOWN], None, "poison_md", "markdown"),
+    ("flooding", QUESTION, [D_CONGES] + MES_LEURRES, None, None, "flooding"),
+]
+NIVEAUX = [
+    ("rien", frozenset()),
+    ("+filtre", frozenset({"filtre"})),
+    ("+rbac", frozenset({"filtre", "rbac"})),
+    ("+normalize", frozenset({"filtre", "rbac", "normalize"})),
+    ("+assainir", frozenset({"filtre", "rbac", "normalize", "assainir"})),
+    ("+provenance", frozenset({"filtre", "rbac", "normalize", "assainir", "provenance"})),
+]
+
+
+def charge_passe(attack, defenses):
+    _, question, corpus, token, target, kind = attack
+    docs = contexte_docs(question, corpus, token, defenses)
+    if kind == "flooding":
+        return any(d["source"] == "spam_upload.md" for d in docs)
+    if kind == "markdown":
+        output = " ".join(d["text"] for d in docs)
+        if "assainir" in defenses:
+            output = assainir_sortie(output)
+        return "![" in output
+    return any(d["id"] == target for d in docs)
+
+
+def tableau_de_bord(defenses, titre, suite=None):
+    suite = ATTAQUES if suite is None else suite
+    print(titre)
+    successes = 0
+    for attack in suite:
+        passed = charge_passe(attack, defenses)
+        successes += passed
+        print(f"  {attack[0]:20} : {'PASSE' if passed else 'bloquee'}")
+    asr = successes / len(suite) if suite else 0.0
+    print(f"  ASR = {successes}/{len(suite)} = {asr:.0%}")
+    return asr
+
+
+def partie_e(with_llm=False):
+    for (name, defenses), expected in zip(NIVEAUX, [1, .8, .6, .4, .2, 0]):
+        assert tableau_de_bord(defenses, "Niveau " + name) == expected
+    # Le cap rend le vrai doc disponible, mais ne retire pas tous les leurres.
+    assert charge_passe(ATTAQUES[-1], {"cap"})
+
+
+PARTIES = {"A": partie_a, "B": partie_b, "C": partie_c, "D": partie_d, "E": partie_e}
 
 
 def main():
