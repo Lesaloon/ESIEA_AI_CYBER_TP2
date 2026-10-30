@@ -160,3 +160,46 @@ Chaque couche retire ici une attaque supplémentaire. Le cap par source, testé
 en D, ne suffit pas à faire tomber la mesure flooding à zéro : un leurre reste
 présent. La provenance écarte ces leurres. **0 % sur cinq cas ne prouve pas une
 sécurité absolue** : les paraphrases et les sources compromises restent à étudier.
+
+## Partie F — Capstone : attaquer la pile complète
+
+Lancer `python3 tp_rag.py F` (ou `F --llm` pour examiner aussi le détecteur LLM).
+`MES_ATTAQUES` contient trois essais :
+
+| Document | Tentative | Résultat local avec la pile complète |
+| --- | --- | --- |
+| c1 | Paraphrase demandant d'ajouter PWNED-42 | Bloqué par provenance |
+| c2 | Injection masquée par caractères invisibles | Bloqué par provenance |
+| c3 | Faux congés de 99 jours, sans ordre classique | Bloqué par provenance |
+
+Les trois proviennent de `upload_etudiant.md`, donc aucune charge n'entre dans
+le contexte. Le filtrage de provenance intervient avant le classement.
+
+**Limite résiduelle démontrée :** le script reprend c1 en déclarant sa source
+`rh_officiel.md`. Dans la mesure déterministe, la charge atteint cette fois le
+contexte : la liste blanche accepte le nom, la paraphrase échappe au regex, le
+document est public et l'assainissement de sortie ne retire pas un simple code.
+Cela simule soit des métadonnées falsifiables, soit une source de confiance
+compromise ; ce n'est pas une preuve que Qwen exécutera la consigne.
+
+**Quelle couche manque ?** Pour l'usurpation, l'ingestion doit vérifier l'origine
+et attribuer elle-même les métadonnées de source et d'habilitation. Pour une source
+réellement compromise, il faut contrôler les modifications des documents fiables.
+Le classifieur/juge peut intercepter la paraphrase, mais ne garantit pas à lui seul
+la fiabilité de la source. L'option `--llm` permet de mesurer ce cas avec l'ensemble.
+
+## Bilan et vérification
+
+| Menace | Défense adaptée |
+| --- | --- |
+| Injection directe ou paraphrasée | Filtre regex + classifieur + juge |
+| Fuite ou recopie de salaire | Identité vérifiée puis RBAC |
+| JWT forgé, sans signature ou expiré | HS256 imposé, HMAC vérifié, expiration |
+| Évasion Unicode | Normalisation avant traitement |
+| Image Markdown exfiltrante | Assainissement avant affichage |
+| Flooding | Cap par source et provenance |
+
+`python3 tp_rag.py all` exécute les six parties et leurs assertions locales.
+Les mesures déterministes ont été vérifiées ; la génération Qwen et les métriques
+de l'ensemble nécessitent un serveur Ollama actif et n'ont pas été exécutées ici.
+Utiliser `python3 tp_rag.py all --llm` pour les rejouer réellement.
